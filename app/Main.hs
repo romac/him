@@ -1,15 +1,18 @@
+
 module Main where
 
-import System.Posix.Terminal (TerminalMode(..), TerminalAttributes(..), TerminalState(..), withoutMode, getTerminalAttributes, setTerminalAttributes)
-import System.Posix.IO (fdRead, fdWrite, stdInput, stdOutput)
-
-import System.IO (hFlush, stdout)
-import System.Exit
-import Data.Typeable (Typeable)
-import Control.Exception (throw, finally, catch, Exception, IOException)
-import Control.Monad (void, forM_)
+import           Control.Exception (throw, finally, catch, Exception, IOException)
+import           Control.Monad (void, forM_)
+import           Data.Maybe (fromMaybe)
+import           Data.Typeable (Typeable)
+import           System.Exit
+import           System.IO (hFlush, stdout)
+import           System.Posix.IO (fdRead, fdWrite, stdInput, stdOutput)
+import           System.Posix.Terminal (TerminalMode(..), TerminalAttributes(..), TerminalState(..), withoutMode, getTerminalAttributes, setTerminalAttributes)
+import           Yi.Rope (YiString)
 
 import qualified System.Console.ANSI as ANSI
+import qualified Yi.Rope             as Rope
 
 allTermModes :: [TerminalMode]
 allTermModes =
@@ -78,21 +81,62 @@ cursorRow   n (Cursor _ col)   = Cursor n col
 startOfLine = cursorCol 0
 endOfLine buf cur@(Cursor row col) = cursorCol (lineLength buf row col + 1) cur
 
-data Buffer = Buffer ![String]
+data Buffer = Buffer ![YiString]
   deriving (Eq, Show)
 
 emptyBuffer :: Buffer
-emptyBuffer = Buffer [""]
+emptyBuffer = Buffer [Rope.empty]
 
 lineCount :: Buffer -> Int
 lineCount (Buffer lines) = length lines
 
 lineLength :: Buffer -> Int -> Int -> Int
-lineLength (Buffer lines) row col = length (lines !! row)
+lineLength (Buffer lines) row col = Rope.length (lines !! row)
 
-insertAt :: Buffer -> Cursor -> String -> Buffer
-insertAt (Buffer lines) (Cursor row col) str =
-  Buffer (init lines ++ [last lines ++ str])
+getLineAt :: Int -> Buffer -> YiString
+getLineAt n (Buffer lines) = lines !! n
+
+replaceLine :: Int -> Buffer -> [YiString] -> Buffer
+replaceLine n (Buffer lines) newLines =
+  Buffer (take n lines ++ newLines ++ drop (n + 1) lines)
+
+deleteLine :: Int -> Buffer -> Buffer
+deleteLine n buf = replaceLine n buf []
+
+insertAt :: Int -> Int -> Buffer -> String -> Buffer
+insertAt row col buf str =
+  let line            = getLineAt row buf
+      (before, after) = Rope.splitAt col line
+      newLine         = Rope.concat [before, Rope.fromString str, after]
+   in replaceLine row buf [newLine]
+
+deleteAt :: Int -> Int -> Buffer -> Buffer
+deleteAt row col buf =
+  let line            = getLineAt row buf
+      (before, after) = Rope.splitAt col line
+   in
+     if Rope.null before
+        then mergeWithPrevLine after
+        else deleteLastChar before after
+  where
+    mergeWithPrevLine after =
+      if row == 0
+         then buf
+         else
+           let newLine = Rope.append (getLineAt (row - 1) buf) after
+               newBuf = replaceLine (row - 1) buf [newLine]
+            in deleteLine row newBuf
+
+    deleteLastChar before after =
+      let allButFirst = fromMaybe Rope.empty (Rope.init before)
+          newLine = Rope.append allButFirst after
+      in replaceLine row buf [newLine]
+
+insertNewlineAt :: Int -> Int -> Buffer -> Buffer
+insertNewlineAt row col buf =
+  let line            = getLineAt row buf
+      (before, after) = Rope.splitAt col line
+   in replaceLine row buf [before, after]
 
 data State = State !Buffer !Cursor
   deriving (Eq, Show)
@@ -101,16 +145,16 @@ blankState :: State
 blankState = State emptyBuffer blankCursor
 
 processBackspace :: Buffer -> Cursor -> State
-processBackspace (Buffer lines) cur@(Cursor row col) =
-  State (Buffer (init lines ++ [init (last lines)])) (cursorLeft 1 cur)
+processBackspace buf cur@(Cursor row col) =
+  State (deleteAt row col buf) (cursorLeft 1 cur)
 
 processNewline :: Buffer -> Cursor -> State
-processNewline (Buffer lines) cur@(Cursor row col) =
-  State (Buffer (lines ++ [""])) ((cursorCol 1 . cursorDown 1) cur)
+processNewline buf cur@(Cursor row col) =
+  State (insertNewlineAt row col buf) (cursorDown 1 (cursorCol 0 cur))
 
 processChar :: Buffer -> Cursor -> String -> State
-processChar buf cur str =
-  State (insertAt buf cur str) (cursorRight 1 cur)
+processChar buf cur@(Cursor row col) str =
+  State (insertAt row col buf str) (cursorRight 1 cur)
 
 processKeyStroke :: State -> String -> IO State
 processKeyStroke (State buf cur) str = do
@@ -162,6 +206,10 @@ codeFromStr "\ESC[B" = Just (CursorDown 1)
 codeFromStr "\ESC[C" = Just (CursorRight 1)
 codeFromStr "\ESC[D" = Just (CursorLeft 1)
 codeFromStr "\ESC[G" = Just (CursorCol 1)
+codeFromStr "\ACK"   = Just (CursorRight 1)
+codeFromStr "\STX"   = Just (CursorLeft 1)
+codeFromStr "\SO"    = Just (CursorDown 1)
+codeFromStr "\DLE"   = Just (CursorUp 1)
 codeFromStr "\DEL"   = Just Backspace
 codeFromStr "\SOH"   = Just StartOfLine
 codeFromStr "\ENQ"   = Just EndOfLine
@@ -180,7 +228,7 @@ render (State (Buffer buf) (Cursor row col)) = do
   output (escapeCode Clear)
   output (escapeCode (MoveCursor 0 0))
   forM_ buf $ \line -> do
-    output line
+    output (Rope.toString line)
     output (escapeCode (CursorDown 1))
     output (escapeCode (CursorCol 0))
   output (escapeCode (MoveCursor row col))
