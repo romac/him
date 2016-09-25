@@ -9,7 +9,7 @@ import Data.Typeable (Typeable)
 import Control.Exception (throw, finally, catch, Exception, IOException)
 import Control.Monad (void, forM_)
 
--- import System.Console.ANSI
+import qualified System.Console.ANSI as ANSI
 
 allTermModes :: [TerminalMode]
 allTermModes =
@@ -65,7 +65,7 @@ data Cursor = Cursor !Int !Int
   deriving (Eq, Show)
 
 blankCursor :: Cursor
-blankCursor = Cursor 1 1
+blankCursor = Cursor 0 0
 
 cursorUp, cursorDown, cursorLeft, cursorRight, cursorCol, cursorRow :: Int -> Cursor -> Cursor
 cursorUp    n (Cursor row col) = Cursor (row - n) col
@@ -74,6 +74,9 @@ cursorLeft  n (Cursor row col) = Cursor row (col - n)
 cursorRight n (Cursor row col) = Cursor row (col + n)
 cursorCol   n (Cursor row _)   = Cursor row n
 cursorRow   n (Cursor _ col)   = Cursor n col
+
+startOfLine = cursorCol 0
+endOfLine buf cur@(Cursor row col) = cursorCol (lineLength buf row col + 1) cur
 
 data Buffer = Buffer ![String]
   deriving (Eq, Show)
@@ -85,7 +88,7 @@ lineCount :: Buffer -> Int
 lineCount (Buffer lines) = length lines
 
 lineLength :: Buffer -> Int -> Int -> Int
-lineLength (Buffer lines) row col = length (lines !! (row - 1))
+lineLength (Buffer lines) row col = length (lines !! row)
 
 insertAt :: Buffer -> Cursor -> String -> Buffer
 insertAt (Buffer lines) (Cursor row col) str =
@@ -110,7 +113,7 @@ processChar buf cur str =
   State (insertAt buf cur str) (cursorRight 1 cur)
 
 processKeyStroke :: State -> String -> IO State
-processKeyStroke (State buf cur@(Cursor row col)) str = do
+processKeyStroke (State buf cur) str = do
   -- throw (AppException str)
   case codeFromStr str of
     Just Abort           -> exitSuccess
@@ -118,8 +121,8 @@ processKeyStroke (State buf cur@(Cursor row col)) str = do
     Just (CursorDown n)  -> return $ State buf (cursorDown n cur)
     Just (CursorRight n) -> return $ State buf (cursorRight n cur)
     Just (CursorLeft n)  -> return $ State buf (cursorLeft n cur)
-    Just StartOfLine     -> return $ State buf (cursorCol 1 cur)
-    Just EndOfLine       -> return $ State buf (cursorCol (lineLength buf row col + 1) cur)
+    Just StartOfLine     -> return $ State buf (startOfLine cur)
+    Just EndOfLine       -> return $ State buf (endOfLine buf cur)
     Just Backspace       -> return $ processBackspace buf cur
     Just NewLine         -> return $ processNewline buf cur
     Nothing              -> return $ processChar buf cur str
@@ -140,18 +143,15 @@ data EscapeCode
   | Abort
   deriving (Eq, Show)
 
-escape :: String -> String
-escape str = "\ESC[" ++ str
-
 escapeCode :: EscapeCode -> String
-escapeCode Clear                = escape "2J"
-escapeCode (MoveCursor row col) = escape $ show row ++ ";" ++ show col ++ "H"
-escapeCode (CursorUp rows)      = escape $ show rows ++ "A"
-escapeCode (CursorDown rows)    = escape $ show rows ++ "B"
-escapeCode (CursorRight cols)   = escape $ show cols ++ "C"
-escapeCode (CursorLeft cols)    = escape $ show cols ++ "D"
-escapeCode (CursorCol col)      = escape $ show col ++ "G"
-escapeCode ClearLine            = escape "2K"
+escapeCode Clear                = ANSI.clearScreenCode
+escapeCode (MoveCursor row col) = ANSI.setCursorPositionCode row col
+escapeCode (CursorUp rows)      = ANSI.cursorUpCode rows
+escapeCode (CursorDown rows)    = ANSI.cursorDownCode rows
+escapeCode (CursorRight cols)   = ANSI.cursorForwardCode cols
+escapeCode (CursorLeft cols)    = ANSI.cursorBackwardCode cols
+escapeCode (CursorCol col)      = ANSI.setCursorColumnCode col
+escapeCode ClearLine            = ANSI.clearLineCode
 escapeCode Backspace            = "\DEL"
 escapeCode NewLine              = "\r"
 escapeCode Abort                = "\ETX"
@@ -178,17 +178,17 @@ readInput = fst <$> fdRead stdInput 3
 render :: State -> IO ()
 render (State (Buffer buf) (Cursor row col)) = do
   output (escapeCode Clear)
-  output (escapeCode (MoveCursor 1 1))
+  output (escapeCode (MoveCursor 0 0))
   forM_ buf $ \line -> do
     output line
     output (escapeCode (CursorDown 1))
-    output (escapeCode (CursorCol 1))
+    output (escapeCode (CursorCol 0))
   output (escapeCode (MoveCursor row col))
 
 clamp :: State -> State
 clamp (State buf (Cursor row col)) =
-  let clampedRow = min (max 1 row) (lineCount buf)
-      clampedCol = min (max 1 col) (lineLength buf clampedRow col + 1)
+  let clampedRow = min (max 0 row) (lineCount buf - 1)
+      clampedCol = min (max 0 col) (lineLength buf clampedRow col)
    in State buf (Cursor clampedRow clampedCol)
 
 loop :: State -> IO ()
