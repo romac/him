@@ -15,8 +15,11 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib
+  exposed-modules:     Him.Terminal
+                     , Him.EscapeCodes
   build-depends:       base >= 4.7 && < 5
+                     , ansi-terminal
+                     , unix
   default-language:    Haskell2010
 
 executable him
@@ -26,7 +29,6 @@ executable him
   build-depends:       base
                      , him
                      , unix
-                     , ansi-terminal
                      , yi-rope
   default-language:    Haskell2010
 

@@ -1,68 +1,20 @@
 
 module Main where
 
-import           Control.Exception (throw, finally, catch, Exception, IOException)
+import           Him.EscapeCodes
+import           Him.Terminal
+
+import           Control.Exception (throw)
 import           Control.Monad (void, forM_)
+import           Data.Char (isPrint)
 import           Data.Maybe (fromMaybe)
-import           Data.Typeable (Typeable)
 import           System.Exit
 import           System.IO (hFlush, stdout)
 import           System.Posix.IO (fdRead, fdWrite, stdInput, stdOutput)
-import           System.Posix.Terminal (TerminalMode(..), TerminalAttributes(..), TerminalState(..), withoutMode, getTerminalAttributes, setTerminalAttributes)
+import           System.Posix.Signals (raiseSignal, sigTSTP)
+
 import           Yi.Rope (YiString)
-
-import qualified System.Console.ANSI as ANSI
-import qualified Yi.Rope             as Rope
-
-allTermModes :: [TerminalMode]
-allTermModes =
-  [ InterruptOnBreak
-  , MapCRtoLF
-  , IgnoreBreak
-  , IgnoreCR
-  , IgnoreParityErrors
-  , MapLFtoCR
-  , CheckParity
-  , StripHighBit
-  , StartStopInput
-  , StartStopOutput
-  , MarkParityErrors
-  , ProcessOutput
-  , LocalMode
-  , ReadEnable
-  , TwoStopBits
-  , HangupOnClose
-  , EnableParity
-  , OddParity
-  , EnableEcho
-  , EchoErase
-  , EchoKill
-  , EchoLF
-  , ProcessInput
-  , ExtendedFunctions
-  , KeyboardInterrupts
-  , NoFlushOnInterrupt
-  , BackgroundWriteInterrupt
-  ]
-
-rawTermSettings :: TerminalAttributes -> TerminalAttributes
-rawTermSettings = foldr (.) id funs
-  where funs = flip withoutMode <$> allTermModes
-
-setTermAttrsNow settings = setTerminalAttributes stdInput settings Immediately
-
-withRawInput :: IO a -> IO a
-withRawInput application = do
-  oldTermSettings <- getTerminalAttributes stdInput
-  let newTermSettings = rawTermSettings oldTermSettings
-  setTermAttrsNow newTermSettings
-  application
-    `finally` setTermAttrsNow oldTermSettings
-
-data AppException = AppException !String
-  deriving (Show, Typeable)
-
-instance Exception AppException
+import qualified Yi.Rope as Rope
 
 data Cursor = Cursor !Int !Int
   deriving (Eq, Show)
@@ -152,15 +104,16 @@ processNewline :: Buffer -> Cursor -> State
 processNewline buf cur@(Cursor row col) =
   State (insertNewlineAt row col buf) (cursorDown 1 (cursorCol 0 cur))
 
-processChar :: Buffer -> Cursor -> String -> State
-processChar buf cur@(Cursor row col) str =
-  State (insertAt row col buf str) (cursorRight 1 cur)
+processChar :: Buffer -> Cursor -> Char -> State
+processChar buf cur@(Cursor row col) chr =
+  State (insertAt row col buf [chr]) (cursorRight 1 cur)
 
 processKeyStroke :: State -> String -> IO State
-processKeyStroke (State buf cur) str = do
+processKeyStroke state@(State buf cur) str = do
   -- throw (AppException str)
   case codeFromStr str of
     Just Abort           -> exitSuccess
+    Just Halt            -> raiseSignal sigTSTP >> return state
     Just (CursorUp n)    -> return $ State buf (cursorUp n cur)
     Just (CursorDown n)  -> return $ State buf (cursorDown n cur)
     Just (CursorRight n) -> return $ State buf (cursorRight n cur)
@@ -169,53 +122,11 @@ processKeyStroke (State buf cur) str = do
     Just EndOfLine       -> return $ State buf (endOfLine buf cur)
     Just Backspace       -> return $ processBackspace buf cur
     Just NewLine         -> return $ processNewline buf cur
-    Nothing              -> return $ processChar buf cur str
-
-data EscapeCode
-  = Clear
-  | MoveCursor !Int !Int
-  | CursorUp !Int
-  | CursorDown !Int
-  | CursorRight !Int
-  | CursorLeft !Int
-  | CursorCol !Int
-  | ClearLine
-  | Backspace
-  | StartOfLine
-  | EndOfLine
-  | NewLine
-  | Abort
-  deriving (Eq, Show)
-
-escapeCode :: EscapeCode -> String
-escapeCode Clear                = ANSI.clearScreenCode
-escapeCode (MoveCursor row col) = ANSI.setCursorPositionCode row col
-escapeCode (CursorUp rows)      = ANSI.cursorUpCode rows
-escapeCode (CursorDown rows)    = ANSI.cursorDownCode rows
-escapeCode (CursorRight cols)   = ANSI.cursorForwardCode cols
-escapeCode (CursorLeft cols)    = ANSI.cursorBackwardCode cols
-escapeCode (CursorCol col)      = ANSI.setCursorColumnCode col
-escapeCode ClearLine            = ANSI.clearLineCode
-escapeCode Backspace            = "\DEL"
-escapeCode NewLine              = "\r"
-escapeCode Abort                = "\ETX"
-
-codeFromStr :: String -> Maybe EscapeCode
-codeFromStr "\ESC[A" = Just (CursorUp 1)
-codeFromStr "\ESC[B" = Just (CursorDown 1)
-codeFromStr "\ESC[C" = Just (CursorRight 1)
-codeFromStr "\ESC[D" = Just (CursorLeft 1)
-codeFromStr "\ESC[G" = Just (CursorCol 1)
-codeFromStr "\ACK"   = Just (CursorRight 1)
-codeFromStr "\STX"   = Just (CursorLeft 1)
-codeFromStr "\SO"    = Just (CursorDown 1)
-codeFromStr "\DLE"   = Just (CursorUp 1)
-codeFromStr "\DEL"   = Just Backspace
-codeFromStr "\SOH"   = Just StartOfLine
-codeFromStr "\ENQ"   = Just EndOfLine
-codeFromStr "\ETX"   = Just Abort
-codeFromStr "\r"     = Just NewLine
-codeFromStr _        = Nothing
+    Nothing              -> do
+      let chr = head str
+      if isPrint chr
+         then return $ processChar buf cur chr
+         else return state
 
 output :: String -> IO ()
 output = void . fdWrite stdOutput
