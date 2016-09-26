@@ -22,8 +22,12 @@ library
                      , Him.Exception
                      , Him.State
                      , Him.Terminal
+                     , Control.Monad.FreeC
   build-depends:       base >= 4.7 && < 5
                      , ansi-terminal
+                     , free
+                     , kan-extensions
+                     , mtl
                      , unix
                      , yi-rope
   default-language:    Haskell2010

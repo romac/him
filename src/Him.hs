@@ -1,5 +1,7 @@
 
-module Him where
+module Him
+  ( runHim
+  ) where
 
 import qualified Him.EscapeCode  as EC
 import qualified Him.Terminal    as Terminal
