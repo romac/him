@@ -25,6 +25,7 @@ library
                      , Control.Monad.FreeC
   build-depends:       base >= 4.7 && < 5
                      , ansi-terminal
+                     , bifunctors
                      , free
                      , generic-deriving
                      , kan-extensions

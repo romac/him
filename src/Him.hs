@@ -3,7 +3,11 @@ module Him
   ( runHim
   ) where
 
+import           Him.EscapeCode  (EscapeCode(..))
 import qualified Him.EscapeCode  as EC
+
+import           Him.Exception
+
 import qualified Him.Terminal    as Terminal
 
 import           Him.Buffer      (Buffer(..))
@@ -17,9 +21,9 @@ import qualified Him.State      as State
 
 import           Control.Exception (throw)
 import           Control.Monad (void, forM_)
+import           Data.Bifunctor (second)
 import           Data.Char (isPrint)
-import           System.Exit
-import           System.IO (hFlush, stdout)
+import           System.Exit (exitSuccess)
 import           System.Posix.IO (fdRead, fdWrite, stdInput, stdOutput)
 import           System.Posix.Signals (raiseSignal, sigTSTP)
 
@@ -44,20 +48,20 @@ processChar :: Buffer -> Cursor -> Char -> State
 processChar buf cur@(Cursor row col) chr =
   State (Buffer.insertAt row col buf [chr]) (Cursor.right 1 cur)
 
-processKeyStroke :: State -> String -> IO State
-processKeyStroke state@(State buf cur) str = do
-  -- throw (AppException str)
+processKeyStroke :: State -> String -> Int -> IO State
+processKeyStroke state@(State buf cur) str bytes = do
+  -- throw $ AppException (show (str, bytes))
   case EC.fromString str of
-    Just EC.Abort           -> exitSuccess
-    Just EC.Halt            -> raiseSignal sigTSTP >> return state
-    Just (EC.CursorUp n)    -> return $ State buf (Cursor.up n cur)
-    Just (EC.CursorDown n)  -> return $ State buf (Cursor.down n cur)
-    Just (EC.CursorRight n) -> return $ State buf (Cursor.right n cur)
-    Just (EC.CursorLeft n)  -> return $ State buf (Cursor.left n cur)
-    Just EC.StartOfLine     -> return $ State buf (startOfLine cur)
-    Just EC.EndOfLine       -> return $ State buf (endOfLine buf cur)
-    Just EC.Backspace       -> return $ processBackspace buf cur
-    Just EC.NewLine         -> return $ processNewline buf cur
+    Just Abort           -> exitSuccess
+    Just Halt            -> raiseSignal sigTSTP >> return state
+    Just (CursorUp n)    -> return $ State buf (Cursor.up n cur)
+    Just (CursorDown n)  -> return $ State buf (Cursor.down n cur)
+    Just (CursorRight n) -> return $ State buf (Cursor.right n cur)
+    Just (CursorLeft n)  -> return $ State buf (Cursor.left n cur)
+    Just StartOfLine     -> return $ State buf (startOfLine cur)
+    Just EndOfLine       -> return $ State buf (endOfLine buf cur)
+    Just Backspace       -> return $ processBackspace buf cur
+    Just NewLine         -> return $ processNewline buf cur
     Nothing              -> do
       let chr = head str
       if isPrint chr
@@ -67,18 +71,21 @@ processKeyStroke state@(State buf cur) str = do
 output :: String -> IO ()
 output = void . fdWrite stdOutput
 
-readInput :: IO String
-readInput = fst <$> fdRead stdInput 3
+sendEscapeCode :: EscapeCode -> IO ()
+sendEscapeCode = output . EC.toString
+
+readInput :: IO (String, Int)
+readInput = second fromIntegral <$> fdRead stdInput 3
 
 render :: State -> IO ()
 render (State (Buffer buf) (Cursor row col)) = do
-  output (EC.toString EC.Clear)
-  output (EC.toString (EC.MoveCursor 0 0))
+  sendEscapeCode Clear
+  sendEscapeCode (MoveCursor 0 0)
   forM_ buf $ \line -> do
     output (Rope.toString line)
-    output (EC.toString (EC.CursorDown 1))
-    output (EC.toString (EC.CursorCol 0))
-  output (EC.toString (EC.MoveCursor row col))
+    sendEscapeCode (CursorDown 1)
+    sendEscapeCode (CursorCol 0)
+  sendEscapeCode (MoveCursor row col)
 
 clamp :: State -> State
 clamp (State buf (Cursor row col)) =
@@ -89,8 +96,8 @@ clamp (State buf (Cursor row col)) =
 loop :: State -> IO ()
 loop state = do
   render state
-  str      <- readInput
-  newState <- processKeyStroke state str
+  (str, bytes) <- readInput
+  newState     <- processKeyStroke state str bytes
   loop (clamp newState)
 
 runHim :: IO ()

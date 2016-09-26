@@ -22,13 +22,13 @@ data EscapeCode
 
 toString :: EscapeCode -> String
 toString Clear                = ANSI.clearScreenCode
+toString ClearLine            = ANSI.clearLineCode
 toString (MoveCursor row col) = ANSI.setCursorPositionCode row col
 toString (CursorUp rows)      = ANSI.cursorUpCode rows
 toString (CursorDown rows)    = ANSI.cursorDownCode rows
 toString (CursorRight cols)   = ANSI.cursorForwardCode cols
 toString (CursorLeft cols)    = ANSI.cursorBackwardCode cols
 toString (CursorCol col)      = ANSI.setCursorColumnCode col
-toString ClearLine            = ANSI.clearLineCode
 toString _                    = ""
 
 fromString :: String -> Maybe EscapeCode
