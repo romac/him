@@ -26,8 +26,10 @@ import           System.Posix.Signals (raiseSignal, sigTSTP)
 import           Yi.Rope (YiString)
 import qualified Yi.Rope as Rope
 
+startOfLine :: Cursor -> Cursor
 startOfLine = Cursor.col 0
 
+endOfLine :: Buffer -> Cursor -> Cursor
 endOfLine buf cur@(Cursor row col) = Cursor.col (Buffer.lineLength buf row col + 1) cur
 
 processBackspace :: Buffer -> Cursor -> State
