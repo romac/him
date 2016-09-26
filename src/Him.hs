@@ -83,7 +83,7 @@ gutterWidth = 4
 
 outputLine :: Int -> YiString -> IO ()
 outputLine num str = do
-  output $ setSGRCode [SetColor Foreground Vivid Black, SetColor Background Vivid White]
+  output $ setSGRCode [SetSwapForegroundBackground True]
   output $ " " ++ show num ++ " "
   output $ setSGRCode [Reset]
   sendEscapeCode (MoveCursor (num - 1) gutterWidth)
@@ -113,5 +113,5 @@ loop state = do
   loop (clamp newState)
 
 runHim :: IO ()
-runHim = Terminal.withRawInput (loop State.blank)
+runHim = Terminal.withRawInput (setTitle "him" >> loop State.blank)
 
