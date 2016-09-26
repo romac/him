@@ -1,4 +1,5 @@
-module Him.Terminal where
+module Him.Terminal
+  ( withRawInput ) where
 
 import           Control.Exception (finally, catch, Exception, IOException)
 import           Data.Typeable (Typeable)
@@ -49,9 +50,4 @@ withRawInput application = do
   setTermAttrsNow newTermSettings
   application
     `finally` setTermAttrsNow oldTermSettings
-
-data AppException = AppException !String
-  deriving (Show, Typeable)
-
-instance Exception AppException
 
