@@ -25,34 +25,34 @@ allTermModes :: [TerminalMode]
 allTermModes = genum
 
 -- allTermModes =
-  -- [ InterruptOnBreak
-  -- , MapCRtoLF
-  -- , IgnoreBreak
-  -- , IgnoreCR
-  -- , IgnoreParityErrors
-  -- , MapLFtoCR
-  -- , CheckParity
-  -- , StripHighBit
-  -- , StartStopInput
-  -- , StartStopOutput
-  -- , MarkParityErrors
-  -- , ProcessOutput
-  -- , LocalMode
-  -- , ReadEnable
-  -- , TwoStopBits
-  -- , HangupOnClose
-  -- , EnableParity
-  -- , OddParity
-  -- , EnableEcho
-  -- , EchoErase
-  -- , EchoKill
-  -- , EchoLF
-  -- , ProcessInput
-  -- , ExtendedFunctions
-  -- , KeyboardInterrupts
-  -- , NoFlushOnInterrupt
-  -- , BackgroundWriteInterrupt
-  -- ]
+--   [ InterruptOnBreak
+--   , MapCRtoLF
+--   , IgnoreBreak
+--   , IgnoreCR
+--   , IgnoreParityErrors
+--   , MapLFtoCR
+--   , CheckParity
+--   , StripHighBit
+--   , StartStopInput
+--   , StartStopOutput
+--   , MarkParityErrors
+--   , ProcessOutput
+--   , LocalMode
+--   , ReadEnable
+--   , TwoStopBits
+--   , HangupOnClose
+--   , EnableParity
+--   , OddParity
+--   , EnableEcho
+--   , EchoErase
+--   , EchoKill
+--   , EchoLF
+--   , ProcessInput
+--   , ExtendedFunctions
+--   , KeyboardInterrupts
+--   , NoFlushOnInterrupt
+--   , BackgroundWriteInterrupt
+--   ]
 
 rawTermSettings :: TerminalAttributes -> TerminalAttributes
 rawTermSettings = foldr (.) id funs

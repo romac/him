@@ -3,6 +3,8 @@ module Him
   ( runHim
   ) where
 
+import System.Console.ANSI
+
 import           Him.EscapeCode  (EscapeCode(..))
 import qualified Him.EscapeCode  as EC
 
@@ -77,15 +79,25 @@ sendEscapeCode = output . EC.toString
 readInput :: IO (String, Int)
 readInput = second fromIntegral <$> fdRead stdInput 3
 
+gutterWidth = 4
+
+outputLine :: Int -> YiString -> IO ()
+outputLine num str = do
+  output $ setSGRCode [SetColor Foreground Vivid Black, SetColor Background Vivid White]
+  output $ " " ++ show num ++ " "
+  output $ setSGRCode [Reset]
+  sendEscapeCode (MoveCursor (num - 1) gutterWidth)
+  output (Rope.toString str)
+  sendEscapeCode (CursorDown 1)
+  sendEscapeCode (CursorCol 0)
+
 render :: State -> IO ()
 render (State (Buffer buf) (Cursor row col)) = do
   sendEscapeCode Clear
   sendEscapeCode (MoveCursor 0 0)
-  forM_ buf $ \line -> do
-    output (Rope.toString line)
-    sendEscapeCode (CursorDown 1)
-    sendEscapeCode (CursorCol 0)
-  sendEscapeCode (MoveCursor row col)
+  let withLinesNums = zip [1..] buf
+  forM_ withLinesNums (uncurry outputLine)
+  sendEscapeCode (MoveCursor row (col + gutterWidth))
 
 clamp :: State -> State
 clamp (State buf (Cursor row col)) =
