@@ -50,10 +50,13 @@ processChar :: Buffer -> Cursor -> Char -> State
 processChar buf cur@(Cursor row col) chr =
   State (Buffer.insertAt row col buf [chr]) (Cursor.right 1 cur)
 
-processKeyStroke :: State -> String -> Int -> IO State
-processKeyStroke state@(State buf cur) str bytes = do
-  -- throw $ AppException (show (str, bytes))
-  case EC.fromString str of
+handleKey :: State -> String -> Int -> IO State
+handleKey state [key]    1 | isPrint key = handlePrintableChar state key
+handleKey state ctrlCode _               = handleControlCode state ctrlCode
+
+handleControlCode :: State -> String -> IO State
+handleControlCode state@(State buf cur) ctrlCode =
+  case EC.fromString ctrlCode of
     Just Abort           -> exitSuccess
     Just Halt            -> raiseSignal sigTSTP >> return state
     Just (CursorUp n)    -> return $ State buf (Cursor.up n cur)
@@ -64,11 +67,10 @@ processKeyStroke state@(State buf cur) str bytes = do
     Just EndOfLine       -> return $ State buf (endOfLine buf cur)
     Just Backspace       -> return $ processBackspace buf cur
     Just NewLine         -> return $ processNewline buf cur
-    Nothing              -> do
-      let chr = head str
-      if isPrint chr
-         then return $ processChar buf cur chr
-         else return state
+    Nothing              -> return state
+
+handlePrintableChar :: State -> Char -> IO State
+handlePrintableChar (State buf cur) chr = return $ processChar buf cur chr
 
 output :: String -> IO ()
 output = void . fdWrite stdOutput
@@ -109,7 +111,7 @@ loop :: State -> IO ()
 loop state = do
   render state
   (str, bytes) <- readInput
-  newState     <- processKeyStroke state str bytes
+  newState     <- handleKey state str bytes
   loop (clamp newState)
 
 runHim :: IO ()
