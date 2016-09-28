@@ -3,7 +3,9 @@ module Him
   ( runHim
   ) where
 
-import System.Console.ANSI
+-- TODO: Remove
+import          System.Console.ANSI hiding (clearScreen)
+import          System.Console.Terminal.Size (fdSize, Window(..))
 
 import           Him.EscapeCode  (EscapeCode(..))
 import qualified Him.EscapeCode  as EC
@@ -21,7 +23,7 @@ import qualified Him.Cursor      as Cursor
 import           Him.State      (State(..))
 import qualified Him.State      as State
 
-import           Control.Exception (throw)
+import           Control.Exception (throw, finally)
 import           Control.Monad (void, forM_)
 import           Data.Bifunctor (second)
 import           Data.Char (isPrint)
@@ -81,25 +83,54 @@ sendEscapeCode = output . EC.toString
 readInput :: IO (String, Int)
 readInput = second fromIntegral <$> fdRead stdInput 3
 
-gutterWidth = 4
+padLeftWith :: Int -> a -> [a] -> [a]
+padLeftWith n x xs = replicate (n - length ys) x ++ ys
+  where ys = take n xs
+
+gutterWidth :: Int
+gutterWidth = 6
+
+lineNum :: Int -> String
+lineNum num = padLeftWith gutterWidth ' ' (show num) ++ " "
 
 outputLine :: Int -> YiString -> IO ()
 outputLine num str = do
   output $ setSGRCode [SetSwapForegroundBackground True]
-  output $ " " ++ show num ++ " "
+  output $ lineNum num
   output $ setSGRCode [Reset]
-  sendEscapeCode (MoveCursor (num - 1) gutterWidth)
+  sendEscapeCode (MoveCursor (num - 1) (gutterWidth + 2))
   output (Rope.toString str)
   sendEscapeCode (CursorDown 1)
   sendEscapeCode (CursorCol 0)
 
-render :: State -> IO ()
-render (State (Buffer buf) (Cursor row col)) = do
+outputEmptyLine :: Int -> IO ()
+outputEmptyLine num = do
+  output $ setSGRCode [SetSwapForegroundBackground True]
+  output $ lineNum num
+  output $ setSGRCode [Reset]
+  sendEscapeCode (CursorDown 1)
+  sendEscapeCode (CursorCol 0)
+
+renderStatusBar :: IO ()
+renderStatusBar = do
+  output $ setSGRCode [SetSwapForegroundBackground True]
+  output " INSERT "
+  output $ setSGRCode [Reset]
+
+clearScreen :: IO ()
+clearScreen = do
   sendEscapeCode Clear
   sendEscapeCode (MoveCursor 0 0)
+
+render :: Window Int -> State -> IO ()
+render (Window h w) (State (Buffer buf) (Cursor row col)) = do
+  clearScreen
   let withLinesNums = zip [1..] buf
   forM_ withLinesNums (uncurry outputLine)
-  sendEscapeCode (MoveCursor row (col + gutterWidth))
+  forM_ [length buf + 1 .. h - 2] outputEmptyLine
+  sendEscapeCode (MoveCursor (h - 1) 0)
+  renderStatusBar
+  sendEscapeCode (MoveCursor row (col + gutterWidth + 2))
 
 clamp :: State -> State
 clamp (State buf (Cursor row col)) =
@@ -109,11 +140,15 @@ clamp (State buf (Cursor row col)) =
 
 loop :: State -> IO ()
 loop state = do
-  render state
+  Just win <- fdSize stdOutput
+  render win state
   (str, bytes) <- readInput
   newState     <- handleKey state str bytes
   loop (clamp newState)
 
 runHim :: IO ()
-runHim = Terminal.withRawInput (setTitle "him" >> loop State.blank)
+runHim = Terminal.withRawInput $ do
+  setTitle "him"
+  loop State.blank
+    `finally` clearScreen
 
