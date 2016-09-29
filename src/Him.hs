@@ -90,8 +90,14 @@ padLeftWith n x xs = replicate (n - length ys) x ++ ys
 gutterWidth :: Int
 gutterWidth = 6
 
+gutter :: String -> String
+gutter str = padLeftWith gutterWidth ' ' str ++ " "
+
 lineNum :: Int -> String
-lineNum num = padLeftWith gutterWidth ' ' (show num) ++ " "
+lineNum = gutter . show
+
+emptyLine :: String
+emptyLine = gutter "~"
 
 outputLine :: Int -> YiString -> IO ()
 outputLine num str = do
@@ -99,14 +105,14 @@ outputLine num str = do
   output $ lineNum num
   output $ setSGRCode [Reset]
   sendEscapeCode (MoveCursor (num - 1) (gutterWidth + 2))
-  output (Rope.toString str)
+  output $ Rope.toString str
   sendEscapeCode (CursorDown 1)
   sendEscapeCode (CursorCol 0)
 
-outputEmptyLine :: Int -> IO ()
-outputEmptyLine num = do
+outputEmptyLine :: IO ()
+outputEmptyLine = do
   output $ setSGRCode [SetSwapForegroundBackground True]
-  output $ lineNum num
+  output $ emptyLine
   output $ setSGRCode [Reset]
   sendEscapeCode (CursorDown 1)
   sendEscapeCode (CursorCol 0)
@@ -127,7 +133,7 @@ render (Window h w) (State (Buffer buf) (Cursor row col)) = do
   clearScreen
   let withLinesNums = zip [1..] buf
   forM_ withLinesNums (uncurry outputLine)
-  forM_ [length buf + 1 .. h - 2] outputEmptyLine
+  forM_ [length buf + 1 .. h - 2] (const outputEmptyLine)
   sendEscapeCode (MoveCursor (h - 1) 0)
   renderStatusBar
   sendEscapeCode (MoveCursor row (col + gutterWidth + 2))
