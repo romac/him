@@ -9,14 +9,16 @@ module Data.Functor.Coproduct
   ( type (:+:)
   , inl
   , inr
+  , coproduct
   , (:<:)
+  , inject
   ) where
 
 import Data.Functor.Sum (Sum(..))
 
 infixr 6 :+:
 
-type f :+: g = Sum f g
+type (:+:) = Sum
 
 inl :: f a -> (f :+: g) a
 inl = InL
@@ -24,14 +26,22 @@ inl = InL
 inr :: g a -> (f :+: g) a
 inr = InR
 
+coproduct :: (f a -> b) -> (g a -> b) -> (f :+: g) a -> b
+coproduct f _ (InL fa) = f fa
+coproduct _ g (InR ga) = g ga
+
 class sub :<: sup where
-  inj :: sub a -> sup a
+  inject :: sub a -> sup a
 
 instance f :<: f where
-  inj = id
+  inject = id
 
-instance f :<: (f :+: g) where
-  inj = inl
+instance {-# OVERLAPPING #-} f :<: (f :+: g) where
+  inject = inl
 
 instance g :<: (f :+: g) where
-  inj = inr
+  inject = inr
+
+instance (f :<: h) => f :<: (g :+: h) where
+  inject = inr . inject
+

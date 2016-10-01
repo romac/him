@@ -15,6 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
+
   exposed-modules:     Him
                      , Him.Buffer
                      , Him.Cursor
@@ -22,11 +23,14 @@ library
                      , Him.Exception
                      , Him.State
                      , Him.Terminal
-                     , Data.Functor.Coproduct
+
+  other-modules:       Data.Functor.Coproduct
                      , Control.Monad.FreeC
+
   build-depends:       base >= 4.7 && < 5
                      , ansi-terminal
                      , bifunctors
+                     , containers
                      , free
                      , generic-deriving
                      , kan-extensions
@@ -42,10 +46,13 @@ executable him
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+
   build-depends:       base
                      , him
+
   default-language:    Haskell2010
 
 source-repository head
   type:     git
   location: https://github.com/romac/him
+
