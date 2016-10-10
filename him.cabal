@@ -32,8 +32,10 @@ library
                      , kan-extensions
                      , mtl
                      , terminal-size
+                     , text
+                     , text-zipper
                      , unix
-                     , yi-rope
+
   default-language:    Haskell2010
 
 executable him
