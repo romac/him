@@ -2,12 +2,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Him.Buffer where
 
 import           Data.Text        (Text)
-import qualified Data.Text        as T
 
 import           Data.Text.Zipper (TextZipper)
 import qualified Data.Text.Zipper as Z

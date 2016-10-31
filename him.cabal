@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
 
   exposed-modules:     Him
+                     , Him.App
                      , Him.Buffer
                      , Him.EscapeCode
                      , Him.Exception

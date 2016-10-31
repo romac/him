@@ -22,11 +22,14 @@ import           Him.Exception
 
 import qualified Him.Terminal    as Terminal
 
+import           Him.App         (AppF(..))
+import qualified Him.App         as App
+
 import           Him.Buffer      (Buffer, BufferF(..))
 import qualified Him.Buffer      as Buffer
 
-import           Him.State      (State(..), StateF)
-import qualified Him.State      as State
+import           Him.State       (State(..), StateF)
+import qualified Him.State       as State
 
 import           Data.Functor.Coproduct
 import           Data.Bifunctor (second)
@@ -52,67 +55,27 @@ type HimF = BufferF :+: AppF
 
 type Him = FreeC HimF
 
-data AppF a where
-  Exit    :: AppF ()
-  Suspend :: AppF ()
-  Output  :: Text -> AppF ()
-  ReadInput :: AppF (Text, Int)
-  WindowSize :: AppF (Maybe (Window Int))
-
-exit :: AppF :<: f => FreeC f ()
-exit = injectFreeC Exit
-
-suspend :: AppF :<: f => FreeC f ()
-suspend = injectFreeC Suspend
-
-output :: AppF :<: f => Text -> FreeC f ()
-output = injectFreeC . Output
-
-output' :: AppF :<: f => String -> FreeC f ()
-output' = injectFreeC . Output . T.pack
-
-sendEscapeCode :: AppF :<: f => EscapeCode -> FreeC f ()
-sendEscapeCode = output . T.pack . EC.toString
-
-setSGRCode :: AppF :<: f => [SGR] -> FreeC f ()
-setSGRCode = output' . ANSI.setSGRCode
-
-readInput :: AppF :<: f => FreeC f (Text, Int)
-readInput = injectFreeC ReadInput
-
-windowSize :: AppF :<: f => FreeC f (Maybe (Window Int))
-windowSize = injectFreeC WindowSize
-
-processBackspace :: BufferF :<: f => FreeC f ()
-processBackspace = Buffer.deletePrevChar
-
-processNewline :: BufferF :<: f => FreeC f ()
-processNewline = Buffer.breakLine
-
-processChar :: BufferF :<: f => Char -> FreeC f ()
-processChar chr = Buffer.insertChar chr
-
 handleKey :: (AppF :<: f, BufferF :<: f) => Text -> Int -> FreeC f ()
-handleKey key      1 | isPrint (head (T.unpack key)) = handlePrintableChar (T.head key)
-handleKey ctrlCode _                                 = handleControlCode (T.unpack ctrlCode)
+handleKey key 1 | isPrint (head (T.unpack key)) =
+  Buffer.insertChar (T.head key)
+
+handleKey ctrlCode _ =
+  handleControlCode (T.unpack ctrlCode)
 
 handleControlCode :: (AppF :<: f, BufferF :<: f) => String -> FreeC f ()
 handleControlCode ctrlCode =
   case EC.fromString ctrlCode of
-    Just EC.Abort           -> exit
-    Just EC.Halt            -> suspend
+    Just EC.Abort           -> App.exit
+    Just EC.Halt            -> App.suspend
     Just (EC.CursorUp n)    -> Buffer.moveUp
     Just (EC.CursorDown n)  -> Buffer.moveDown
     Just (EC.CursorRight n) -> Buffer.moveRight
     Just (EC.CursorLeft n)  -> Buffer.moveLeft
     Just EC.StartOfLine     -> Buffer.gotoBOL
     Just EC.EndOfLine       -> Buffer.gotoEOL
-    Just EC.Backspace       -> processBackspace
-    Just EC.NewLine         -> processNewline
+    Just EC.Backspace       -> Buffer.deletePrevChar
+    Just EC.NewLine         -> Buffer.breakLine
     Nothing                 -> return ()
-
-handlePrintableChar :: BufferF :<: f => Char -> FreeC f ()
-handlePrintableChar chr = processChar chr
 
 gutterWidth :: Int
 gutterWidth = 6
@@ -128,54 +91,54 @@ emptyLine = gutter "~"
 
 outputLine :: AppF :<: f => Int -> Text -> FreeC f ()
 outputLine num str = do
-  setSGRCode [SetSwapForegroundBackground True]
-  output $ lineNum num
-  setSGRCode [Reset]
-  sendEscapeCode (EC.MoveCursor (num - 1) (gutterWidth + 2))
-  output str
-  sendEscapeCode (EC.CursorDown 1)
-  sendEscapeCode (EC.CursorCol 0)
+  App.setSGRCode [SetSwapForegroundBackground True]
+  App.output $ lineNum num
+  App.setSGRCode [Reset]
+  App.sendEscapeCode (EC.MoveCursor (num - 1) (gutterWidth + 2))
+  App.output str
+  App.sendEscapeCode (EC.CursorDown 1)
+  App.sendEscapeCode (EC.CursorCol 0)
 
 outputEmptyLine :: AppF :<: f => FreeC f ()
 outputEmptyLine = do
-  setSGRCode [SetSwapForegroundBackground True]
-  output emptyLine
-  setSGRCode [Reset]
-  sendEscapeCode (EC.CursorDown 1)
-  sendEscapeCode (EC.CursorCol 0)
+  App.setSGRCode [SetSwapForegroundBackground True]
+  App.output emptyLine
+  App.setSGRCode [Reset]
+  App.sendEscapeCode (EC.CursorDown 1)
+  App.sendEscapeCode (EC.CursorCol 0)
 
 renderStatusBar :: (AppF :<: f, BufferF :<: f) => FreeC f ()
 renderStatusBar = do
-  setSGRCode [SetSwapForegroundBackground True]
-  output " INSERT "
+  App.setSGRCode [SetSwapForegroundBackground True]
+  App.output " INSERT "
   fileName <- Buffer.getFileName
   case fileName of
-    Just name -> output "|  " >> output name
+    Just name -> App.output "|  " >> App.output name
     Nothing   -> return ()
-  setSGRCode [Reset]
+  App.setSGRCode [Reset]
 
 clearScreen :: AppF :<: f => FreeC f ()
 clearScreen = do
-  sendEscapeCode EC.Clear
-  sendEscapeCode (EC.MoveCursor 0 0)
+  App.sendEscapeCode EC.Clear
+  App.sendEscapeCode (EC.MoveCursor 0 0)
 
 render :: (AppF :<: f, BufferF :<: f) => FreeC f ()
 render = do
-  Just (Window h w) <- windowSize
+  Just (Window h w) <- App.windowSize
   clearScreen
   lines <- Buffer.getContents
   let withLinesNums = zip [1..] lines
   forM_ withLinesNums (uncurry outputLine)
   forM_ [length lines + 1 .. h - 2] (const outputEmptyLine)
-  sendEscapeCode (EC.MoveCursor (h - 1) 0)
+  App.sendEscapeCode (EC.MoveCursor (h - 1) 0)
   renderStatusBar
   (row, col) <- Buffer.cursorPosition
-  sendEscapeCode (EC.MoveCursor row (col + gutterWidth + 2))
+  App.sendEscapeCode (EC.MoveCursor row (col + gutterWidth + 2))
 
 loop :: (AppF :<: f, BufferF :<: f) => FreeC f ()
 loop = do
   render
-  (str, bytes) <- readInput
+  (str, bytes) <- App.readInput
   newState     <- handleKey str bytes
   loop
 
@@ -230,5 +193,5 @@ runHim :: IO ()
 runHim = Terminal.withRawInput $ do
   ANSI.setTitle "him"
   runHimIO loop
-    -- `finally` ANSI.clearScreen
+    `finally` ANSI.clearScreen
 
