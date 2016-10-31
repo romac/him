@@ -7,52 +7,52 @@ module Him.Terminal
   ( withRawInput
   ) where
 
-import           Control.Exception (finally, catch, Exception, IOException)
-import           Data.Typeable (Typeable)
+import           Control.Exception (finally)
 import           System.Posix.IO (stdInput)
 import           System.Posix.Terminal
-                   ( TerminalMode(..), TerminalAttributes(..), TerminalState(..)
+                   ( TerminalMode(..), TerminalAttributes, TerminalState(..)
                    , withoutMode, getTerminalAttributes, setTerminalAttributes
                    )
 
-import           GHC.Generics
-import           Generics.Deriving.Enum
+-- import           GHC.Generics
+-- import           Generics.Deriving.Enum
 
-deriving instance Generic TerminalMode
-deriving instance GEnum TerminalMode
+-- deriving instance Generic TerminalMode
+-- deriving instance GEnum TerminalMode
+
+-- allTermModes :: [TerminalMode]
+-- allTermModes = genum
 
 allTermModes :: [TerminalMode]
-allTermModes = genum
-
--- allTermModes =
---   [ InterruptOnBreak
---   , MapCRtoLF
---   , IgnoreBreak
---   , IgnoreCR
---   , IgnoreParityErrors
---   , MapLFtoCR
---   , CheckParity
---   , StripHighBit
---   , StartStopInput
---   , StartStopOutput
---   , MarkParityErrors
---   , ProcessOutput
---   , LocalMode
---   , ReadEnable
---   , TwoStopBits
---   , HangupOnClose
---   , EnableParity
---   , OddParity
---   , EnableEcho
---   , EchoErase
---   , EchoKill
---   , EchoLF
---   , ProcessInput
---   , ExtendedFunctions
---   , KeyboardInterrupts
---   , NoFlushOnInterrupt
---   , BackgroundWriteInterrupt
---   ]
+allTermModes =
+  [ InterruptOnBreak
+  , MapCRtoLF
+  , IgnoreBreak
+  , IgnoreCR
+  , IgnoreParityErrors
+  , MapLFtoCR
+  , CheckParity
+  , StripHighBit
+  , StartStopInput
+  , StartStopOutput
+  , MarkParityErrors
+  , ProcessOutput
+  , LocalMode
+  , ReadEnable
+  , TwoStopBits
+  , HangupOnClose
+  , EnableParity
+  , OddParity
+  , EnableEcho
+  , EchoErase
+  , EchoKill
+  , EchoLF
+  , ProcessInput
+  , ExtendedFunctions
+  , KeyboardInterrupts
+  , NoFlushOnInterrupt
+  , BackgroundWriteInterrupt
+  ]
 
 rawTermSettings :: TerminalAttributes -> TerminalAttributes
 rawTermSettings = foldr (.) id funs

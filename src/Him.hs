@@ -15,33 +15,28 @@ import qualified System.Console.ANSI as ANSI
 import           System.Console.ANSI (SGR(..))
 import           System.Console.Terminal.Size (fdSize, Window(..))
 
-import           Him.EscapeCode  (EscapeCode)
 import qualified Him.EscapeCode  as EC
-
-import           Him.Exception
 
 import qualified Him.Terminal    as Terminal
 
 import           Him.App         (AppF(..))
 import qualified Him.App         as App
 
-import           Him.Buffer      (Buffer, BufferF(..))
+import           Him.Buffer      (BufferF(..))
 import qualified Him.Buffer      as Buffer
 
-import           Him.State       (State(..), StateF)
+import           Him.State       (State(..))
 import qualified Him.State       as State
 
 import           Data.Functor.Coproduct
-import           Data.Bifunctor (second)
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Char (isPrint)
 import           Data.Monoid ((<>))
 
-import           Control.Exception (throw, finally)
+import           Control.Exception (finally)
 import           Control.Monad (void, forM_)
-import           Control.Monad.State.Strict (StateT, MonadState(..), evalStateT, modify', gets)
-import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.State.Strict (StateT, MonadState(..), evalStateT, gets)
 import           Control.Monad.FreeC
 import           Control.Monad.IO.Class
 
@@ -65,17 +60,21 @@ handleKey ctrlCode _ =
 handleControlCode :: (AppF :<: f, BufferF :<: f) => String -> FreeC f ()
 handleControlCode ctrlCode =
   case EC.fromString ctrlCode of
-    Just EC.Abort           -> App.exit
-    Just EC.Halt            -> App.suspend
-    Just (EC.CursorUp n)    -> Buffer.moveUp
-    Just (EC.CursorDown n)  -> Buffer.moveDown
-    Just (EC.CursorRight n) -> Buffer.moveRight
-    Just (EC.CursorLeft n)  -> Buffer.moveLeft
-    Just EC.StartOfLine     -> Buffer.gotoBOL
-    Just EC.EndOfLine       -> Buffer.gotoEOL
-    Just EC.Backspace       -> Buffer.deletePrevChar
-    Just EC.NewLine         -> Buffer.breakLine
-    Nothing                 -> return ()
+    Just EC.Abort            -> App.exit
+    Just EC.Halt             -> App.suspend
+    Just (EC.CursorUp _)     -> Buffer.moveUp
+    Just (EC.CursorDown _)   -> Buffer.moveDown
+    Just (EC.CursorRight _)  -> Buffer.moveRight
+    Just (EC.CursorLeft _)   -> Buffer.moveLeft
+    Just (EC.MoveCursor x y) -> Buffer.moveCursor (x, y)
+    Just EC.StartOfLine      -> Buffer.gotoBOL
+    Just EC.EndOfLine        -> Buffer.gotoEOL
+    Just EC.Backspace        -> Buffer.deletePrevChar
+    Just EC.NewLine          -> Buffer.breakLine
+    Just EC.Clear            -> return () -- TODO
+    Just (EC.CursorCol _)    -> return () -- TODO
+    Just EC.ClearLine        -> return () -- TODO
+    Nothing                  -> return ()
 
 gutterWidth :: Int
 gutterWidth = 6
@@ -124,12 +123,12 @@ clearScreen = do
 
 render :: (AppF :<: f, BufferF :<: f) => FreeC f ()
 render = do
-  Just (Window h w) <- App.windowSize
+  Just (Window h _) <- App.windowSize
   clearScreen
-  lines <- Buffer.getContents
-  let withLinesNums = zip [1..] lines
+  contents <- Buffer.getContents
+  let withLinesNums = zip [1..] contents
   forM_ withLinesNums (uncurry outputLine)
-  forM_ [length lines + 1 .. h - 2] (const outputEmptyLine)
+  forM_ [length contents + 1 .. h - 2] (const outputEmptyLine)
   App.sendEscapeCode (EC.MoveCursor (h - 1) 0)
   renderStatusBar
   (row, col) <- Buffer.cursorPosition
@@ -139,15 +138,15 @@ loop :: (AppF :<: f, BufferF :<: f) => FreeC f ()
 loop = do
   render
   (str, bytes) <- App.readInput
-  newState     <- handleKey str bytes
+  handleKey str bytes
   loop
 
 withText' :: MonadState State m => (TextZipper Text -> TextZipper Text) -> m ()
 withText' f = do
-  state <- get
-  let buf = State.buffer state
+  st <- get
+  let buf = State.buffer st
   let newBuf = buf { Buffer.contents = f (Buffer.contents buf)  }
-  put $ state { buffer = newBuf }
+  put $ st { buffer = newBuf }
 
 withText :: MonadState State m => (TextZipper Text -> a) -> m a
 withText f = do
@@ -172,6 +171,11 @@ runBuffer MoveRight        = withText' Z.moveRight
 runBuffer MoveLeft         = withText' Z.moveLeft
 runBuffer MoveUp           = withText' Z.moveUp
 runBuffer MoveDown         = withText' Z.moveDown
+runBuffer Empty            = undefined
+runBuffer KillToEOL        = undefined
+runBuffer KillToBOL        = undefined
+runBuffer DeleteChar       = undefined
+runBuffer TransposeChars   = undefined
 
 runApp :: MonadIO m => AppF ~> m
 runApp Exit       = liftIO exitSuccess
