@@ -31,9 +31,6 @@ import           System.Exit (exitSuccess)
 import           System.Posix.IO (fdRead, fdWrite, stdInput, stdOutput)
 import           System.Posix.Signals (raiseSignal, sigTSTP)
 
-import           Yi.Rope (YiString)
-import qualified Yi.Rope as Rope
-
 startOfLine :: Cursor -> Cursor
 startOfLine = Cursor.col 0
 
