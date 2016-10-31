@@ -18,7 +18,6 @@ library
 
   exposed-modules:     Him
                      , Him.Buffer
-                     , Him.Cursor
                      , Him.EscapeCode
                      , Him.Exception
                      , Him.State
@@ -35,9 +34,11 @@ library
                      , generic-deriving
                      , kan-extensions
                      , mtl
+                     , newtype-generics
                      , terminal-size
                      , text
                      , text-zipper
+                     , transformers
                      , unix
 
   default-language:    Haskell2010

@@ -8,7 +8,8 @@ packages:
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 extra-deps:
-  - text-zipper-0.8.
+  - text-zipper-0.8.3
+  - newtype-generics-0.5
 
 # Override default flag values for local packages and extra-deps
 flags: {}

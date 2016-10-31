@@ -39,8 +39,8 @@ instance f :<: f where
 instance {-# OVERLAPPING #-} f :<: (f :+: g) where
   inject = inl
 
-instance g :<: (f :+: g) where
-  inject = inr
+-- instance g :<: (f :+: g) where
+--   inject = inr
 
 instance (f :<: h) => f :<: (g :+: h) where
   inject = inr . inject
