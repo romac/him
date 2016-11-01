@@ -15,6 +15,7 @@ module Data.Functor.Coproduct
   ) where
 
 import Data.Functor.Sum (Sum(..))
+import Data.Functor.Coyoneda (Coyoneda, liftCoyoneda)
 
 infixr 6 :+:
 
@@ -32,6 +33,9 @@ coproduct _ g (InR ga) = g ga
 
 class sub :<: sup where
   inject :: sub a -> sup a
+
+instance f :<: Coyoneda f where
+  inject = liftCoyoneda
 
 instance f :<: f where
   inject = id
